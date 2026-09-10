@@ -1829,6 +1829,24 @@ describe('Mnemon memory subagent coordinator', () => {
       agentOptions: { provider: 'pinned-provider', model: 'pinned-model', maxTokens: 32_768 },
     }))
   })
+
+  it('passes the delegated operation to the task Agent model resolver once per run', async () => {
+    const host = subagents({ answer: 'SQLite.', citations: [] })
+    const resultTools = toolRegistry()
+    const resolver = vi.fn((operation?: string) => operation === 'answer'
+      ? { provider: 'openai-codex', model: 'gpt-5.3-codex-spark' }
+      : { provider: 'openai-codex', model: 'gpt-5.6-luna' })
+    const coordinator = new MnemonSubagentCoordinator(host.value, runtimeSource(), resultTools.value, resolver)
+
+    await expect(coordinator.answer(parent(), 'Which database?', [], new AbortController().signal)).resolves.toMatchObject({
+      answer: 'SQLite.',
+    })
+    expect(resolver).toHaveBeenCalledOnce()
+    expect(resolver).toHaveBeenCalledWith('answer')
+    expect(host.start).toHaveBeenCalledWith('spawn', expect.objectContaining({
+      agentOptions: { provider: 'openai-codex', model: 'gpt-5.3-codex-spark' },
+    }))
+  })
 })
 
 describe('Mnemon root/child tool split', () => {

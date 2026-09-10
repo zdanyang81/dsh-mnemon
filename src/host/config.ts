@@ -37,7 +37,9 @@ import type {
   RuntimeMemoryConfig,
   ResolvedTaskAgentModelConfig,
   TaskAgentModelConfig,
+  TaskAgentRoutingConfig,
 } from "./protocol.ts"
+import { resolveTaskAgentRouting } from './task-agent-routing.ts'
 
 export {
   DEFAULT_IDLE_REVIEW_MS,
@@ -89,6 +91,11 @@ const TaskAgentModelSchema: z<TaskAgentModelConfig> = z.object({
   mode: z.union(['inherit', 'fixed'] as const),
   provider: z.string(),
   model: z.string(),
+})
+
+const TaskAgentRoutingSchema: z<TaskAgentRoutingConfig> = z.object({
+  mode: z.union(['default', 'office-quota'] as const),
+  advicePath: z.string(),
 })
 
 const MnemonEmbeddingSchema = z.object({
@@ -189,6 +196,7 @@ export const Config: z<Config> = z.object({
   }).default({ toolviews: false, turnBar: true, saveAction: true }),
   persistenceStrategy: MemoryPersistenceStrategySchema,
   taskAgentModel: TaskAgentModelSchema,
+  taskAgentRouting: TaskAgentRoutingSchema,
 })
 
 export function resolveInteractionConfig(config: InteractionConfig = {}): ResolvedInteractionConfig {
@@ -351,5 +359,6 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
     },
     persistenceStrategy: resolvePersistenceStrategy(config.persistenceStrategy),
     taskAgentModel: resolveTaskAgentModel(config.taskAgentModel),
+    taskAgentRouting: resolveTaskAgentRouting(config.taskAgentRouting),
   }
 }

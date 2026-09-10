@@ -60,6 +60,7 @@ describe('Mnemon config and resolution', () => {
         providerConnections: {},
       },
       taskAgentModel: { mode: 'inherit' },
+      taskAgentRouting: { mode: 'default' },
     })
   })
 
@@ -121,6 +122,15 @@ describe('Mnemon config and resolution', () => {
     }).taskAgentModel).toEqual({ mode: 'fixed', provider: 'deepseek', model: 'deepseek-chat' })
     expect(() => resolveConfig({ taskAgentModel: { mode: 'fixed', provider: 'deepseek' } }))
       .toThrow('provider and model')
+  })
+
+  it('keeps taskAgentRouting defaulted off and validates office-quota advicePath', () => {
+    expect(resolveConfig({}).taskAgentRouting).toEqual({ mode: 'default' })
+    expect(resolveConfig({
+      taskAgentRouting: { mode: 'office-quota', advicePath: ' /tmp/advice.md ' },
+    }).taskAgentRouting).toEqual({ mode: 'office-quota', advicePath: '/tmp/advice.md' })
+    expect(() => resolveConfig({ taskAgentRouting: { mode: 'office-quota', advicePath: '/tmp/advice\0.md' } }))
+      .toThrow('null byte')
   })
 
   it('migrates the settings schema empty candidate list to the conservative manual default', () => {

@@ -58,6 +58,9 @@ mnemon:
     mode: inherit # inherit | fixed
     # provider: deepseek # fixed 时必填
     # model: deepseek-chat # fixed 时必填
+  taskAgentRouting:
+    mode: default # default | office-quota
+    # advicePath: /home/zdy/额度建议.md
   remoteAccess: read-only # 远程管理：read-only | trusted-host
 ```
 
@@ -92,6 +95,7 @@ mnemon:
 | `tabEnabled` | `true` | boolean | 是否挂载所选入口和工作台；关闭后 Host RPC、命令和 Agent 工具保持注册 |
 | `writeEnabled` | `true` | boolean | 是否暴露语义写工具、写 RPC 和写命令 |
 | `taskAgentModel` | `{ mode: inherit }` | `inherit` / `fixed` | AI 元信息、Agent 查询、记忆沉淀和档案归档使用的独立任务 Agent，以及空闲复盘 worker 的模型路由；`fixed` 必须同时保存 `provider` 与 `model`，并会钉住对应的写入、证据问答、Provider 选择、迁移、压缩、归档和元信息维护 worker。对话中的 Recall 与 Related 是 Host 直接读取，不使用该路由 |
+| `taskAgentRouting` | `{ mode: default }` | `default` / `office-quota` | 同一批任务 Agent 与受限 worker 的可选办公室额度路由。`default` 不改变 inherit/fixed。`office-quota` 每个 run 只选一次，读取建议表（`advicePath`，否则 `DSH_MNEMON_ADVICE_PATH`，否则 `/home/zdy/额度建议.md`）：`answer` 走 Spark、Composer、Luna、Grok、Flash；其余现有操作走 Luna、Grok、Flash。不做运行时重试。对话中的 Recall 与 Related 仍是 Host 直接读取 |
 | `remoteAccess` | `read-only` | `read-only` / `trusted-host` | 非 loopback Mnemon 管理授权，仅启动时读取；由 API Gateway 映射执行，并保留旧 DSH 0.1.1-rc.2 通道策略 |
 | `mnemon-ui.turnBar` | `true` | boolean | 回合尾记忆活动条；默认开启，**保存后实时生效** |
 | `mnemon-ui.saveAction` | `true` | boolean | 已定稿助手回复旁的「存入记忆」图标与确认弹窗；默认开启，**保存后实时生效** |
@@ -280,7 +284,7 @@ Memory Space 目录建立后，长期语义操作使用明确的记忆空间 ID�
 
 AI 元信息、Agent 查询、工作台/对话区的记忆沉淀和档案归档会创建一个无会话历史的独立顶层任务 Agent。它使用当前查看工作区作为 cwd；即使没有选中主 Agent session，也能落到左上角选定工作区。任务完成后 Agent 会被释放。
 
-默认的 `inherit` 先使用 DSH“创建新会话”时的默认 Provider / Model；该路由不可用时才沿用当前可用主 Agent 的完整模型路由。设置页选择“指定模型 Provider”后，会保存完整的 Provider + Model，并只覆盖 Mnemon 后台任务，不改变对话主 Agent。独立任务 Agent 内部如需语义判断，仍可调度受限 worker；该 worker 继承任务 Agent 的模型路由。
+默认的 `inherit` 先使用 DSH“创建新会话”时的默认 Provider / Model；该路由不可用时才沿用当前可用主 Agent 的完整模型路由。设置页选择“指定模型 Provider”后，会保存完整的 Provider + Model，并只覆盖 Mnemon 后台任务，不改变对话主 Agent。独立任务 Agent 内部如需语义判断，仍可调度受限 worker；该 worker 继承任务 Agent 的模型路由。可选的 `taskAgentRouting.mode: office-quota` 会覆盖同一批独立任务根和受限 worker 的 inherit/fixed，按办公室建议表每个 run 只选一次候选。不做运行时重试；各操作的 `maxTokens` 以及 Recall/Related 的 Host 直读保持不变。
 
 ```yaml
 mnemon:

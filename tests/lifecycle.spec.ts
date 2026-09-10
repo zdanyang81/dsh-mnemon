@@ -396,6 +396,30 @@ describe('Mnemon DSH lifecycle integration', () => {
     expect(value.defaultModel.currentSelection).not.toHaveBeenCalled()
   })
 
+  it('uses the office-quota answer chain for clean Agent Query roots without changing inherit defaults', async () => {
+    const value = fixture(resolveConfig({
+      cliPath: '/fake/mnemon',
+      taskAgentRouting: {
+        mode: 'office-quota',
+        advicePath: '/this-path-does-not-exist.md',
+      },
+    }))
+
+    await value.lifecycle.answerTask('', 'Which database?', [], '/tmp/workspace-two')
+    await value.lifecycle.maintainMetadata('', ['project'], '/tmp/workspace-two')
+
+    expect(value.createTaskAgent).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      agentOptions: { provider: 'openai-codex', model: 'gpt-5.3-codex-spark' },
+    }))
+    expect(value.createTaskAgent).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      agentOptions: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+    }))
+    expect(value.defaultModel.currentSelection).not.toHaveBeenCalled()
+    await expect(value.lifecycle.taskAgentModels(false)).resolves.toMatchObject({
+      effective: { provider: 'deepseek-official', model: 'deepseek-v4-flash', source: 'office-quota' },
+    })
+  })
+
   it('lists model Providers concurrently and reports the effective independent task route', async () => {
     const value = fixture()
 

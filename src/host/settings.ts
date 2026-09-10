@@ -76,7 +76,7 @@ const MUTABLE_FIELDS = [
   'embedding',
   'recallQuality',
   'routingGuidance', 'lifecycleEnabled', 'recallMode', 'writebackMode', 'idleReviewMs',
-  'displayMode', 'tabEnabled', 'writeEnabled', 'persistenceStrategy', 'taskAgentModel',
+  'displayMode', 'tabEnabled', 'writeEnabled', 'persistenceStrategy', 'taskAgentModel', 'taskAgentRouting',
 ]
 // remoteAccess is intentionally absent: on rc.2 changing the transport
 // authority requires a local configuration edit and a Host restart. On
