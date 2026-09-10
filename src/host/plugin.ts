@@ -8,6 +8,7 @@ import { MnemonLifecycle } from './lifecycle.ts'
 import { registerRpc } from './rpc.ts'
 import { migrateLegacyDisplayMode, registerSettingsRpc } from './settings.ts'
 import { MnemonSubagentCoordinator } from './subagent.ts'
+import { resolveConfiguredTaskAgentModel, type TaskAgentOperation } from './task-agent-routing.ts'
 import { registerTools } from './tools.ts'
 import { registerMnemonSubagentTokenUsageProjection } from './subagent-token-usage.ts'
 import { provideMemoryRuntime } from '../core/runtime.ts'
@@ -95,13 +96,9 @@ export function apply(rawContext: unknown, config: MnemonConfig = {}): void {
     migrate()
     return () => { disposed = true; unsubscribe() }
   }, 'dsh-mnemon: canonical displayMode migration')
-  const coordinator: MnemonSubagentCoordinator = new MnemonSubagentCoordinator(ctx.subagents, runtime, ctx, () => {
-    const taskAgentModel = runtime.config.taskAgentModel
-    if (taskAgentModel.mode !== 'fixed') return undefined
-    const provider = taskAgentModel.provider?.trim()
-    const model = taskAgentModel.model?.trim()
-    if (provider === undefined || provider === '' || model === undefined || model === '') return undefined
-    return { provider, model }
+  const coordinator: MnemonSubagentCoordinator = new MnemonSubagentCoordinator(ctx.subagents, runtime, ctx, (operation?: TaskAgentOperation) => {
+    const configured = resolveConfiguredTaskAgentModel(runtime.config, operation ?? 'write')
+    return configured === undefined ? undefined : { provider: configured.provider, model: configured.model }
   }, () => runtime.config.runtimeMemory.maintenanceMaxTokens,
   (scope, signal, operation) => lifecycle.runRuntimeMaintenanceTask(scope, signal, operation))
   const lifecycle = new MnemonLifecycle(ctx, coordinator, runtime.config, runtime)

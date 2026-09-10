@@ -208,6 +208,8 @@ export interface Config {
   persistenceStrategy?: MemoryPersistenceStrategy
   /** Model route used by clean, session-independent maintenance Agents. */
   taskAgentModel?: TaskAgentModelConfig
+  /** Opt-in office quota router for task Agents; default leaves inherit/fixed unchanged. */
+  taskAgentRouting?: TaskAgentRoutingConfig
 }
 
 export interface TaskAgentModelConfig {
@@ -220,6 +222,16 @@ export interface ResolvedTaskAgentModelConfig {
   mode: 'inherit' | 'fixed'
   provider?: string
   model?: string
+}
+
+export interface TaskAgentRoutingConfig {
+  mode?: 'default' | 'office-quota'
+  advicePath?: string
+}
+
+export interface ResolvedTaskAgentRoutingConfig {
+  mode: 'default' | 'office-quota'
+  advicePath?: string
 }
 
 export interface TaskAgentModelCatalogModel {
@@ -243,7 +255,7 @@ export interface TaskAgentModelCatalogFailure {
 }
 
 export interface TaskAgentModelCatalog {
-  effective?: { provider: string; model: string; source: 'fixed' | 'dsh-default' | 'active-agent' }
+  effective?: { provider: string; model: string; source: 'fixed' | 'dsh-default' | 'active-agent' | 'office-quota' }
   defaultSelection?: { provider: string; model: string }
   groups: TaskAgentModelCatalogGroup[]
   failures: TaskAgentModelCatalogFailure[]
@@ -283,6 +295,7 @@ export interface ResolvedConfig {
   }
   persistenceStrategy: ResolvedMemoryPersistenceStrategy
   taskAgentModel: ResolvedTaskAgentModelConfig
+  taskAgentRouting: ResolvedTaskAgentRoutingConfig
 }
 
 export interface ResolvedInteractionConfig {

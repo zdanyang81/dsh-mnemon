@@ -25,8 +25,9 @@ import type { PreparedMemoryPlacement } from 'dsh-mnemon-source-memory-spaces/co
 import type { MemoryWake } from "../core/contracts/index.ts"
 import { agentScope, type MnemonAgentRuntimeSource } from './runtime.ts'
 import { hostSessionEventAt, hostSessionEvents } from './session-events.ts'
+import { resolveConfiguredTaskAgentModel, type TaskAgentOperation } from './task-agent-routing.ts'
 
-type AgentRuntimeSource = Pick<MnemonAgentRuntimeSource, 'forAgent' | 'executions'>
+type AgentRuntimeSource = Pick<MnemonAgentRuntimeSource, 'config' | 'forAgent' | 'executions'>
 
 interface HostDefaultModelService {
   currentSelection(): { provider: string; model: string }
@@ -743,7 +744,7 @@ export class MnemonLifecycle {
   /** Synthesize a Web Agent Query without borrowing a conversation Agent or its history. */
   answerTask(sessionId: string, query: string, evidence: Insight[], workspaceRoot?: string, signal = new AbortController().signal) {
     const root = workspaceRoot?.trim() || this.workspaceRoot(sessionId)
-    return this.runTaskAgent(sessionId, root, signal, agent => this.coordinator.answer(agent, query, evidence, signal))
+    return this.runTaskAgent(sessionId, root, signal, agent => this.coordinator.answer(agent, query, evidence, signal), 'answer')
   }
 
   remember(sessionId: string, request: RememberRequest, signal = new AbortController().signal) {
@@ -759,7 +760,7 @@ export class MnemonLifecycle {
   }
 
   runRuntimeMaintenanceTask<T>(scope: import('../core/contracts/index.ts').MemoryOperationScope, signal: AbortSignal, operation: (agent: HostAgent) => Promise<T>): Promise<T> {
-    return this.runTaskAgent('', scope.workspaceId, signal, operation)
+    return this.runTaskAgent('', scope.workspaceId, signal, operation, 'migration')
   }
 
   documents(sessionId: string) {
@@ -781,7 +782,7 @@ export class MnemonLifecycle {
   archiveDocument(sessionId: string, id: string, workspaceRoot?: string, signal = new AbortController().signal) {
     const root = workspaceRoot?.trim() || this.workspaceRoot(sessionId)
     if (root === undefined || root.trim() === '') throw new Error('a selected DSH workspace is required to archive a Mnemon Document')
-    return this.runTaskAgent(sessionId, root, signal, agent => this.coordinator.archiveDocument(agent, id, signal))
+    return this.runTaskAgent(sessionId, root, signal, agent => this.coordinator.archiveDocument(agent, id, signal), 'document-archive')
   }
 
   mutate(sessionId: string, operation: string, request: unknown, signal = new AbortController().signal) {
@@ -794,7 +795,7 @@ export class MnemonLifecycle {
 
   maintainMetadata(sessionId: string, memoryBodyIds: readonly string[], workspaceRoot?: string, signal = new AbortController().signal) {
     const root = workspaceRoot?.trim() || this.workspaceRoot(sessionId)
-    return this.runTaskAgent(sessionId, root, signal, agent => this.coordinator.maintainMetadata(agent, memoryBodyIds, signal))
+    return this.runTaskAgent(sessionId, root, signal, agent => this.coordinator.maintainMetadata(agent, memoryBodyIds, signal), 'metadata-maintenance')
   }
 
   async supervise(sessionId: string, content: string, idempotencyKey?: string, signal = new AbortController().signal): Promise<SupervisedWritebackResult> {
@@ -821,7 +822,7 @@ export class MnemonLifecycle {
       content,
       idempotencyKey,
       signal,
-      operation => this.runTaskAgent(normalizedSessionId, root, signal, operation),
+      operation => this.runTaskAgent(normalizedSessionId, root, signal, operation, 'write'),
     )
   }
 
@@ -890,6 +891,7 @@ export class MnemonLifecycle {
     workspaceRoot: string | undefined,
     signal: AbortSignal,
     operation: (agent: HostAgent) => Promise<T>,
+    routingOperation: TaskAgentOperation = 'write',
   ): Promise<T> {
     const create = this.ctx.agents.create?.bind(this.ctx.agents)
     if (create === undefined) {
@@ -903,7 +905,7 @@ export class MnemonLifecycle {
     let handle: HostAgentHandle | undefined
     let failure: unknown
     try {
-      const creation = await this.taskAgentCreation(fallbackSessionId, workspaceRoot)
+      const creation = await this.taskAgentCreation(fallbackSessionId, workspaceRoot, routingOperation)
       handle = await create({
         sessionId,
         ...creation,
@@ -925,8 +927,9 @@ export class MnemonLifecycle {
   private async taskAgentCreation(
     fallbackSessionId: string,
     workspaceRoot: string | undefined,
+    routingOperation: TaskAgentOperation = 'write',
   ): Promise<Pick<CreateHostAgentOptions, 'meta' | 'agentOptions' | 'setup'>> {
-    const agentOptions = this.taskAgentModelOptions(fallbackSessionId, workspaceRoot)
+    const agentOptions = this.taskAgentModelOptions(fallbackSessionId, workspaceRoot, routingOperation)
     if (agentOptions === undefined) throw new Error('no default provider/model is available for a clean task Agent')
     const cwd = workspaceRoot?.trim()
     const presets = presetService(this.ctx.get('agentPresets'))
@@ -949,15 +952,13 @@ export class MnemonLifecycle {
   }
 
   /** Resolve a complete task route for both status admission and actual creation. */
-  private taskAgentModelRoute(fallbackSessionId: string, workspaceRoot: string | undefined): { options: NonNullable<CreateHostAgentOptions['agentOptions']>; source: 'fixed' | 'dsh-default' | 'active-agent' } | undefined {
+  private taskAgentModelRoute(fallbackSessionId: string, workspaceRoot: string | undefined, routingOperation: TaskAgentOperation = 'write'): { options: NonNullable<CreateHostAgentOptions['agentOptions']>; source: 'fixed' | 'dsh-default' | 'active-agent' | 'office-quota' } | undefined {
     const fallback = this.ctx.agents.get(fallbackSessionId.trim()) ?? this.availableAgent(workspaceRoot) ?? this.availableAgent()
-    if (this.config.taskAgentModel.mode === 'fixed') {
-      const provider = this.config.taskAgentModel.provider?.trim()
-      const model = this.config.taskAgentModel.model?.trim()
-      if (provider === undefined || provider === '' || model === undefined || model === '') return undefined
+    const configured = resolveConfiguredTaskAgentModel(this.runtimeSource?.config ?? this.config, routingOperation)
+    if (configured !== undefined) {
       return {
-        source: 'fixed',
-        options: { provider, model, ...(fallback?.options?.maxTokens === undefined ? {} : { maxTokens: fallback.options.maxTokens }) },
+        source: configured.source,
+        options: { provider: configured.provider, model: configured.model, ...(fallback?.options?.maxTokens === undefined ? {} : { maxTokens: fallback.options.maxTokens }) },
       }
     }
     let selected: { provider: string; model: string } | undefined
@@ -970,8 +971,8 @@ export class MnemonLifecycle {
     return { source: selectedProvider !== undefined && selectedProvider !== '' && selectedModel !== undefined && selectedModel !== '' ? 'dsh-default' : 'active-agent', options: { provider, model, ...(fallback?.options?.maxTokens === undefined ? {} : { maxTokens: fallback.options.maxTokens }) } }
   }
 
-  private taskAgentModelOptions(fallbackSessionId: string, workspaceRoot: string | undefined): NonNullable<CreateHostAgentOptions['agentOptions']> | undefined {
-    return this.taskAgentModelRoute(fallbackSessionId, workspaceRoot)?.options
+  private taskAgentModelOptions(fallbackSessionId: string, workspaceRoot: string | undefined, routingOperation: TaskAgentOperation = 'write'): NonNullable<CreateHostAgentOptions['agentOptions']> | undefined {
+    return this.taskAgentModelRoute(fallbackSessionId, workspaceRoot, routingOperation)?.options
   }
 
   private install(agent: HostAgent, source: LifecycleAgentSnapshot['startSource']): void {

@@ -56,6 +56,9 @@ mnemon:
     mode: inherit # inherit | fixed
     # provider: deepseek # required for fixed
     # model: deepseek-chat # required for fixed
+  taskAgentRouting:
+    mode: default # default | office-quota
+    # advicePath: /home/zdy/额度建议.md
   remoteAccess: read-only # remote management: read-only | trusted-host
 ```
 
@@ -90,6 +93,7 @@ mnemon:
 | `tabEnabled` | `true` | boolean | Whether to mount the selected entry and workbench; Host RPC, commands, and Agent tools remain registered when off |
 | `writeEnabled` | `true` | boolean | Whether to expose semantic write tools, write RPC, and write commands |
 | `taskAgentModel` | `{ mode: inherit }` | `inherit` / `fixed` | Model route for independent task Agents used by AI metadata, Agent Query, memory distillation, and Document archiving, plus the idle-review worker; `fixed` requires both `provider` and `model` and also pins their bounded workers for write, answer, provider placement, migration, compaction, archive, and metadata maintenance. Conversation Recall and Related are direct Host reads and do not use this route |
+| `taskAgentRouting` | `{ mode: default }` | `default` / `office-quota` | Opt-in office quota router for the same task Agents and delegated workers. `default` leaves inherit/fixed unchanged. `office-quota` selects once per run from an advice markdown table (`advicePath`, else `DSH_MNEMON_ADVICE_PATH`, else `/home/zdy/额度建议.md`): `answer` uses Spark, Composer, Luna, Grok, then Flash; every other existing operation uses Luna, Grok, then Flash. There is no runtime retry. Conversation Recall and Related remain direct Host reads |
 | `remoteAccess` | `read-only` | `read-only` / `trusted-host` | Startup-only grant for non-loopback Mnemon management; enforced by the API Gateway projection and retained for legacy DSH 0.1.1-rc.2 channels |
 | `mnemon-ui.turnBar` | `true` | boolean | Turn-tail memory activity bar; on by default, **applies live after saving** |
 | `mnemon-ui.saveAction` | `true` | boolean | “Save to memory” icon and confirmation on finalized assistant replies; on by default, **applies live after saving** |
@@ -278,7 +282,7 @@ After the Memory Space directory has been established, long-term semantic operat
 
 AI metadata, Agent Query, workbench/conversation memory distillation, and document archiving create a clean independent top-level task Agent. It uses the selected workspace as its cwd, works even when no main Agent session is selected, and is disposed after the task finishes.
 
-The default `inherit` mode first uses the DSH Provider / Model selected for new sessions, then falls back to a complete route from the current available main Agent. Choosing **Choose model provider** in Settings stores a complete Provider + Model and overrides only Mnemon background tasks; it does not change the conversation Agent. When semantic judgment requires a bounded worker inside that task Agent, the worker inherits the task Agent route.
+The default `inherit` mode first uses the DSH Provider / Model selected for new sessions, then falls back to a complete route from the current available main Agent. Choosing **Choose model provider** in Settings stores a complete Provider + Model and overrides only Mnemon background tasks; it does not change the conversation Agent. When semantic judgment requires a bounded worker inside that task Agent, the worker inherits the task Agent route. Opt-in `taskAgentRouting.mode: office-quota` replaces inherit/fixed for those same clean roots and delegated workers, selecting one candidate per run from the office advice table. There is no runtime retry; per-operation `maxTokens` and Recall/Related Host reads stay unchanged.
 
 ```yaml
 mnemon:

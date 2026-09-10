@@ -14,6 +14,7 @@ import type { MemoryCompositionGeneration } from '../core/composition.ts'
 import { agentScope, type MnemonAgentRuntimeSource, type MnemonRuntimeGraph } from './runtime.ts'
 import type { ComposableMemoryTurn } from '../core/turns.ts'
 import { hostSessionEvents } from './session-events.ts'
+import type { TaskAgentOperation } from './task-agent-routing.ts'
 
 export type { SubagentCounters } from "./protocol.ts"
 
@@ -853,7 +854,7 @@ export class MnemonSubagentCoordinator {
     private readonly subagents: HostSubagentsService,
     private readonly runtimeSource: AgentRuntimeSource,
     private readonly resultRuntime?: HostResultToolRuntime,
-    private readonly taskAgentModelResolver?: () => { provider: string; model: string } | undefined,
+    private readonly taskAgentModelResolver?: (operation?: TaskAgentOperation) => { provider: string; model: string } | undefined,
     private readonly runtimeMaintenanceMaxTokensResolver?: () => number,
     private readonly runtimeMaintenanceTaskRunner?: RuntimeMaintenanceTaskRunner,
   ) {}
@@ -1647,7 +1648,7 @@ Completion protocol: call \`${resultToolName}\` exactly once with the final resu
         : operation === 'document-archive' ? 8_192
         : operation === 'metadata-maintenance' ? 4_096
         : undefined
-      const fixed = this.taskAgentModelResolver?.()
+      const fixed = this.taskAgentModelResolver?.(operation)
       const baseAgentOptions = perOpMaxTokens === undefined ? undefined : { maxTokens: perOpMaxTokens }
       const resolvedAgentOptions = fixed === undefined ? baseAgentOptions : { ...(baseAgentOptions ?? {}), provider: fixed.provider, model: fixed.model }
       run = await this.subagents.start(provider, {
