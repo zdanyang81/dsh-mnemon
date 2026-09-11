@@ -952,15 +952,20 @@ describe('MnemonWorkbench', () => {
     interval.mockRestore()
   })
 
-  it('shows one page-level spinner while deep status checks continue in the background', async () => {
-    const { connection } = createConnection({ statusPending: true })
+  it('keeps mount lightweight and probes deep status only after explicit refresh', async () => {
+    const { connection, call } = createConnection({ statusPending: true })
     render(<MnemonWorkbench connection={connection} settingsScope={settingsScope} sessionId="session-1" />)
 
     fireEvent.click(await screen.findByRole('tab', { name: '状态' }))
     expect(await screen.findByRole('heading', { name: '系统状态' })).toBeTruthy()
-    expect(screen.getAllByRole('status', { name: '检查中…' })).toHaveLength(1)
+    await waitFor(() => expect(call).toHaveBeenCalledWith(expect.anything(), 'status-summary', expect.objectContaining({ sessionId: 'session-1' })))
+    expect(call.mock.calls.filter(([, endpoint]) => endpoint === 'status')).toHaveLength(0)
+    expect(screen.queryByRole('status', { name: '检查中…' })).toBeNull()
     expect(screen.getByText('dsh-mnemon 0.1.2')).toBeTruthy()
-    expect(screen.queryByText('连接需要检查')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '重新检查' }))
+    await waitFor(() => expect(call).toHaveBeenCalledWith(expect.anything(), 'status', expect.objectContaining({ sessionId: 'session-1', refresh: true })))
+    expect(screen.getAllByRole('status', { name: '检查中…' })).toHaveLength(1)
   })
 
   it('edits an existing Memory Space name and description', async () => {
