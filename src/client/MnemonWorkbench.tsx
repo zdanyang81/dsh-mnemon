@@ -489,17 +489,19 @@ function MnemonWorkspace({ connection, settingsScope, sessionId, workspaceId, wo
     return subscribeMnemonAnchor(sessionId, applyAnchor)
   }, [sessionId, applyAnchor])
 
-  const loadStatus = useCallback(async () => {
+  const loadStatus = useCallback(async (deep = false) => {
     const request = ++statusRequest.current
     setStatusState(current => ({ contextKey: viewContextKey, value: current.contextKey === viewContextKey ? current.value : null, loading: true, error: null }))
     try {
       const summary = await client.statusSummary()
       if (request !== statusRequest.current) return
-      const needsDeepStatus = summary.memoryBodies?.some(body => body.statusLoading === true) === true
-      setStatusState({ contextKey: viewContextKey, value: summary, loading: needsDeepStatus, error: null })
-      if (!needsDeepStatus) return
+      setStatusState({ contextKey: viewContextKey, value: summary, loading: deep, error: null })
+      // Summary is intentionally final for mount and context changes. Native
+      // provider probing and the Documents snapshot run only after an explicit
+      // refresh or a mutation that can make the summary stale.
+      if (!deep) return
       try {
-        const next = await client.status()
+        const next = await client.status(true)
         if (request === statusRequest.current) setStatusState({ contextKey: viewContextKey, value: next, loading: false, error: null })
       } catch (reason) {
         if (request === statusRequest.current) setStatusState({ contextKey: viewContextKey, value: summary, loading: false, error: message(reason) })
@@ -508,10 +510,10 @@ function MnemonWorkspace({ connection, settingsScope, sessionId, workspaceId, wo
       if (request === statusRequest.current) setStatusState({ contextKey: viewContextKey, value: null, loading: false, error: message(reason) })
     }
   }, [client, viewContextKey])
-  useEffect(() => { void loadStatus() }, [loadStatus])
+  useEffect(() => { void loadStatus(false) }, [loadStatus])
 
-  const mutate = useCallback(() => { setRevision(value => value + 1); void loadStatus() }, [loadStatus])
-  const refreshAll = () => { setRevision(value => value + 1); void loadStatus() }
+  const mutate = useCallback(() => { setRevision(value => value + 1); void loadStatus(true) }, [loadStatus])
+  const refreshAll = () => { setRevision(value => value + 1); void loadStatus(true) }
   const activationEnabled = status?.writeEnabled === true
   const writeEnabled = activationEnabled && settingsSnapshot.status === 'ready' && settingsSnapshot.writable
   const catalogKnown = status?.memoryBodies !== undefined
@@ -604,7 +606,7 @@ function MnemonWorkspace({ connection, settingsScope, sessionId, workspaceId, wo
       <div className={css.workspace}>
         <WorkspaceNavigation page={page} onSelect={selectPage} sourcePages={sourceNavigationEntries} disabledTypes={disabledTypes} />
         <section key={viewContextKey} className={appearanceClass(css.canvas, sidebarCss.canvas)} ref={canvasRef} data-testid="mnemon-canvas" data-lock-page-header={(activeSourcePage?.navigation?.stickyHeader !== false) ? '' : undefined}>
-          {page === 'status' && <StatusPage client={client} status={status} loading={statusLoading} writeEnabled={writeEnabled} onRefresh={() => void loadStatus()} />}
+          {page === 'status' && <StatusPage client={client} status={status} loading={statusLoading} writeEnabled={writeEnabled} onRefresh={() => void loadStatus(true)} />}
           {activeManagedSourceInstance !== undefined && managedSourcePageContent}
           {activeSourcePage !== undefined && customSourcePage}
         </section>

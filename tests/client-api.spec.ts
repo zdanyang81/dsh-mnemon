@@ -17,6 +17,17 @@ describe('MnemonClient product transport', () => {
     })
   })
 
+  it('marks only explicit deep status refreshes as cache bypasses', async () => {
+    const call = vi.fn(async () => ({ ok: true as const, value: {} }))
+    const client = new MnemonClient({ rpc: { call } } as ClientConnectionHandle, 'session-1', 'workspace-1')
+    await client.status()
+    await client.status(true)
+    expect(call.mock.calls).toEqual([
+      ['/dsh-mnemon-read', 'status', { sessionId: 'session-1', workspaceId: 'workspace-1' }],
+      ['/dsh-mnemon-read', 'status', { refresh: true, sessionId: 'session-1', workspaceId: 'workspace-1' }],
+    ])
+  })
+
   it.each([403, 404])('never widens Source activation authority after HTTP %i', async status => {
     const call = vi.fn(async () => { throw new Error(`HTTP ${status}`) })
     const client = new MnemonClient({ rpc: { call } } as ClientConnectionHandle, 'session-1', 'workspace-1')

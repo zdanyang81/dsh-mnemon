@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { resolveConfig, type Config } from '../src/host/config.ts'
 import type { HostConnectionHandle, HostRpcHandler } from '../src/host/dsh.ts'
 import type { MnemonLifecycle } from '../src/host/lifecycle.ts'
-import { createActivationHandler, createPackHandler, createReadHandler, createWriteHandler, MNEMON_ACTIVATION_CHANNEL, MNEMON_PACK_CHANNEL, MNEMON_READ_CHANNEL, MNEMON_WRITE_CHANNEL, registerRpc } from '../src/host/rpc.ts'
+import { clearDeepStatusCacheForTests, createActivationHandler, createPackHandler, createReadHandler, createWriteHandler, MNEMON_ACTIVATION_CHANNEL, MNEMON_PACK_CHANNEL, MNEMON_READ_CHANNEL, MNEMON_WRITE_CHANNEL, registerRpc } from '../src/host/rpc.ts'
 import type { LiveMnemonRuntime, MnemonRuntimeGraph } from '../src/host/runtime.ts'
 import { MnemonSubagentCoordinator } from '../src/host/subagent.ts'
 import type { VersionUpdateManager } from '../src/host/version-updates.ts'
@@ -10,7 +10,7 @@ import { compositionFixture } from './fixtures/composition.ts'
 import openviking from 'dsh-mnemon-provider-openviking'
 
 const cleanup: Array<() => Promise<void>> = []
-afterEach(async () => { for (const release of cleanup.splice(0)) await release() })
+afterEach(async () => { clearDeepStatusCacheForTests(); for (const release of cleanup.splice(0)) await release() })
 
 async function fixture(config: Config = {}) {
   const value = await compositionFixture(config)
@@ -306,6 +306,35 @@ describe('Host assistance and channels', () => {
       healthy: true, lifecycle: { enabled: true }, memorySystem: { evaluation: { state: 'ready' } },
       workspaceContext: { aligned: false, selectedRoot: '/fixture/data', effectiveRoot: '/fixture/other' },
     } })
+  })
+
+  it('keeps status-summary lightweight without reading the Documents snapshot', async () => {
+    const f = protocolFixture()
+    const result = await createReadHandler(f.runtime, lifecycle())('status-summary', { sessionId: 's1' })
+    expect(result).toMatchObject({ ok: true, value: { healthy: true } })
+    expect((result as { ok: true; value: Record<string, unknown> }).value).not.toHaveProperty('documents')
+    expect(f.sources['documents']!.read).not.toHaveBeenCalled()
+    expect(f.sources['memory-spaces']!.read).toHaveBeenCalledWith('status-summary', { sessionId: 's1' }, undefined)
+  })
+
+  it('deduplicates and caches deep provider status while explicit refresh bypasses the TTL', async () => {
+    const f = protocolFixture()
+    let release!: (value: unknown) => void
+    const pending = new Promise(resolve => { release = resolve })
+    f.sources['memory-spaces']!.read.mockImplementation(async operation => {
+      if (operation === 'status') return pending
+      return { healthy: true, memoryBodies: [] }
+    })
+    const read = createReadHandler(f.runtime, lifecycle())
+    const first = read('status', { sessionId: 's1' })
+    const second = read('status', { sessionId: 's2' })
+    await vi.waitFor(() => expect(f.sources['memory-spaces']!.read.mock.calls.filter(([operation]) => operation === 'status')).toHaveLength(1))
+    release({ healthy: true, memoryBodies: [] })
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2)
+    await read('status', { sessionId: 's3' })
+    expect(f.sources['memory-spaces']!.read.mock.calls.filter(([operation]) => operation === 'status')).toHaveLength(1)
+    await read('status', { sessionId: 's4', refresh: true })
+    expect(f.sources['memory-spaces']!.read.mock.calls.filter(([operation]) => operation === 'status')).toHaveLength(2)
   })
 
   it('keeps activation strictly narrower than the configuration/mutation channel', async () => {

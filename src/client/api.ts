@@ -86,8 +86,8 @@ export class MnemonClient {
     }
   }
 
-  status(): Promise<StatusView> {
-    return this.call(MNEMON_READ_CHANNEL, 'status', this.scoped())
+  status(refresh = false): Promise<StatusView> {
+    return this.call(MNEMON_READ_CHANNEL, 'status', this.scoped(refresh ? { refresh: true } : {}))
   }
 
   statusSummary(): Promise<StatusView> {

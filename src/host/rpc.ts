@@ -62,6 +62,42 @@ const SPACE_WRITE_CAPABILITIES: Record<string, MemoryCapability> = {
   'body-delete': 'forget', 'body-merge': 'write', 'provider-service-update': 'maintain',
 }
 
+const DEEP_STATUS_TTL_MS = 30_000
+const DEEP_STATUS_CACHE_LIMIT = 16
+type DeepStatusEntry = { value?: Record<string, unknown>; expiresAt: number; pending?: Promise<Record<string, unknown>> }
+const deepStatusCache = new Map<string, DeepStatusEntry>()
+
+function deepStatusKey(runtime: ScopedRuntime): string {
+  return JSON.stringify([runtime.graph.directory, runtime.scope.storage, runtime.scope.workspaceId ?? '', runtime.effectiveRoot])
+}
+
+async function deepStatus(runtime: ScopedRuntime, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const key = deepStatusKey(runtime)
+  if (payload.refresh === true) deepStatusCache.delete(key)
+  const now = Date.now()
+  const current = deepStatusCache.get(key)
+  if (current?.value !== undefined && current.expiresAt > now) return current.value
+  if (current?.pending !== undefined) return current.pending
+  const { refresh: _refresh, ...request } = payload
+  // A caller changing pages must not abort the shared probe for every other
+  // caller. The result is bounded by the Source's own timeout and cached only
+  // after success.
+  const pending = runtime.source('memory-spaces').read<Record<string, unknown>>('status', request)
+  deepStatusCache.set(key, { expiresAt: 0, pending })
+  try {
+    const value = await pending
+    deepStatusCache.delete(key)
+    deepStatusCache.set(key, { value, expiresAt: Date.now() + DEEP_STATUS_TTL_MS })
+    while (deepStatusCache.size > DEEP_STATUS_CACHE_LIMIT) deepStatusCache.delete(deepStatusCache.keys().next().value!)
+    return value
+  } catch (error) {
+    deepStatusCache.delete(key)
+    throw error
+  }
+}
+
+export function clearDeepStatusCacheForTests(): void { deepStatusCache.clear() }
+
 // Optional product workflows. They are not Source or Core operations and are
 // advertised only for the exact default instances that this Host coordinates.
 const ASSISTANCE: Record<string, readonly string[]> = {
@@ -205,10 +241,12 @@ export function createReadHandler(input: LiveMnemonRuntime, lifecycle?: MnemonLi
         case 'status':
         case 'status-summary': {
           let documents
-          try { documents = await runtime.source('documents').read('snapshot', null, signal) } catch { /* Optional Source may be unavailable in this scope. */ }
+          if (endpoint === 'status') {
+            try { documents = await runtime.source('documents').read('snapshot', null, signal) } catch { /* Optional Source may be unavailable in this scope. */ }
+          }
           const composition = await compositionStatus(runtime)
           const hasSpaces = composition.sources.some(source => source.sourceTypeId === 'memory-spaces')
-          const status = hasSpaces ? await runtime.source('memory-spaces').read<Record<string, unknown>>(endpoint, payload, signal) : {
+          const status = hasSpaces ? endpoint === 'status' ? await deepStatus(runtime, payload) : await runtime.source('memory-spaces').read<Record<string, unknown>>('status-summary', payload, signal) : {
             healthy: composition.evaluation.state === 'ready', commandFound: false, cliPath: runtime.graph.config.cliPath ?? '',
             dataDir: runtime.graph.directory, mnemonDefaultStore: '', dshActiveStores: [],
             writeEnabled: runtime.graph.config.writeEnabled, defaultRecallLimit: runtime.graph.config.defaultRecallLimit,
