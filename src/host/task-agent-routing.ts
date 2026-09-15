@@ -16,7 +16,7 @@ export type TaskAgentOperation =
   | 'document-archive'
   | 'metadata-maintenance'
 
-export type OfficeQuotaCandidateId = 'spark' | 'composer' | 'luna' | 'grok' | 'flash'
+export type OfficeQuotaCandidateId = 'spark' | 'ark' | 'kimi' | 'composer' | 'luna' | 'grok' | 'flash'
 
 export interface OfficeQuotaAdviceRow {
   product: string
@@ -35,7 +35,7 @@ interface OfficeQuotaCandidate {
   id: OfficeQuotaCandidateId
   provider: string
   model: string
-  product?: 'spark' | 'cursor' | 'codex' | 'grok'
+  product?: 'spark' | 'volcengine' | 'kimi' | 'cursor' | 'codex' | 'grok'
   missing: 'eligible' | 'skip' | 'final'
 }
 
@@ -71,6 +71,22 @@ const GROK: OfficeQuotaCandidate = {
   missing: 'skip',
 }
 
+const ARK: OfficeQuotaCandidate = {
+  id: 'ark',
+  provider: 'volcengine-agent-plan',
+  model: 'ark-code-latest',
+  product: 'volcengine',
+  missing: 'skip',
+}
+
+const KIMI: OfficeQuotaCandidate = {
+  id: 'kimi',
+  provider: 'kimi',
+  model: 'k2.8',
+  product: 'kimi',
+  missing: 'skip',
+}
+
 const FLASH: OfficeQuotaCandidate = {
   id: 'flash',
   provider: 'deepseek-official',
@@ -78,8 +94,8 @@ const FLASH: OfficeQuotaCandidate = {
   missing: 'final',
 }
 
-const ANSWER_CANDIDATES: readonly OfficeQuotaCandidate[] = [SPARK, COMPOSER, LUNA, GROK, FLASH]
-const OTHER_CANDIDATES: readonly OfficeQuotaCandidate[] = [LUNA, GROK, FLASH]
+const ANSWER_CANDIDATES: readonly OfficeQuotaCandidate[] = [SPARK, KIMI, COMPOSER, LUNA, GROK, FLASH]
+const OTHER_CANDIDATES: readonly OfficeQuotaCandidate[] = [ARK, KIMI, LUNA, GROK, FLASH]
 const STOPPED_SPENT = new Set(['已过线', '到线', '已过软线'])
 
 let adviceCache: { path: string; mtimeMs: number; size: number; text: string } | undefined
@@ -189,6 +205,8 @@ function productKey(value: string): OfficeQuotaCandidate['product'] | undefined 
   if (normalized === 'cursor' || normalized.startsWith('cursor ')) return 'cursor'
   if (normalized === 'codex' || normalized.startsWith('codex ')) return 'codex'
   if (normalized === 'grok' || normalized.startsWith('grok ')) return 'grok'
+  if (normalized === '火山' || normalized.startsWith('火山') || normalized === 'volcengine' || normalized.startsWith('volcengine ')) return 'volcengine'
+  if (normalized === 'kimi' || normalized.startsWith('kimi')) return 'kimi'
   return undefined
 }
 

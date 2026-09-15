@@ -79,54 +79,78 @@ describe('office quota advice parser', () => {
 })
 
 describe('office quota candidate selection', () => {
-  it('uses Spark, Composer, Luna, Grok, then Flash for answer', () => {
+  it('uses Spark, Kimi, Composer, Luna, Grok, then Flash for answer', () => {
     expect(selectOfficeQuotaCandidate('answer', parseAdviceTable(table([
+      ['Kimi Coding', '90%', '10%', '1 点'],
       ['Cursor', '4%', '6%', '已过软线'],
       ['Codex', '0%', '10%', '1 点'],
       ['Grok', '0%', '10%', '1 点'],
     ])))).toMatchObject({ id: 'spark', provider: 'openai-codex', model: 'gpt-5.3-codex-spark' })
     expect(selectOfficeQuotaCandidate('answer', parseAdviceTable(table([
       ['Codex Spark', '1%', '10%', '到线'],
+      ['Kimi Coding', '80%', '10%', '1 点'],
+      ['Cursor', '80%', '10%', '1 点'],
+    ])))).toMatchObject({ id: 'kimi', provider: 'kimi', model: 'k2.8' })
+    expect(selectOfficeQuotaCandidate('answer', parseAdviceTable(table([
+      ['Spark', '1%', '10%', '已过线'],
+      ['Kimi Coding', '10%', '10%', '到线'],
       ['Cursor', '80%', '10%', '1 点'],
     ])))).toMatchObject({ id: 'composer', provider: 'cursor-subscription', model: 'composer-2.5' })
     expect(selectOfficeQuotaCandidate('answer', parseAdviceTable(table([
       ['Spark', '1%', '10%', '已过线'],
+      ['Kimi Coding', '10%', '10%', '到线'],
       ['Cursor', '4%', '6%', '已过软线'],
       ['Codex', '90%', '10%', '1 点'],
     ])))).toMatchObject({ id: 'luna', provider: 'openai-codex', model: 'gpt-5.6-luna' })
     expect(selectOfficeQuotaCandidate('answer', parseAdviceTable(table([
       ['Spark', '1%', '10%', '到线'],
+      ['Kimi Coding', '10%', '10%', '到线'],
       ['Cursor', '4%', '6%', '已过软线'],
       ['Codex', '10%', '10%', '1 点'],
       ['Grok', '20%', '5%', '1 点'],
     ])))).toMatchObject({ id: 'grok', provider: 'xai', model: 'grok-4.3' })
     expect(selectOfficeQuotaCandidate('answer', parseAdviceTable(table([
       ['Spark', '1%', '10%', '到线'],
+      ['Kimi Coding', '10%', '10%', '到线'],
       ['Cursor', '4%', '6%', '已过软线'],
       ['Codex', '0%', '10%', '1 点'],
       ['Grok', '5%', '10%', '1 点'],
     ])))).toMatchObject({ id: 'flash', provider: 'deepseek-official', model: 'deepseek-v4-flash' })
   })
 
-  it('uses Luna, Grok, then Flash for every other existing operation', () => {
+  it('uses Ark, Kimi, Luna, Grok, then Flash for every other existing operation', () => {
     expect(selectOfficeQuotaCandidate('write', parseAdviceTable(table([
-      ['Cursor', '90%', '10%', '1 点'],
-      ['Spark', '90%', '10%', '1 点'],
+      ['火山', '21%', '14%', '7 点'],
+      ['Kimi Coding', '80%', '10%', '1 点'],
+      ['Codex', '90%', '10%', '1 点'],
+    ])))).toMatchObject({ id: 'ark', provider: 'volcengine-agent-plan', model: 'ark-code-latest' })
+    expect(selectOfficeQuotaCandidate('review', parseAdviceTable(table([
+      ['火山子池', '14%', '14%', '到线'],
+      ['Kimi Coding', '80%', '10%', '1 点'],
+      ['Codex', '90%', '10%', '1 点'],
+    ])))).toMatchObject({ id: 'kimi', provider: 'kimi', model: 'k2.8' })
+    expect(selectOfficeQuotaCandidate('placement', parseAdviceTable(table([
+      ['火山', '14%', '14%', '到线'],
+      ['Kimi Coding', '10%', '10%', '到线'],
       ['Codex', '90%', '10%', '1 点'],
     ])))).toMatchObject({ id: 'luna', provider: 'openai-codex', model: 'gpt-5.6-luna' })
-    expect(selectOfficeQuotaCandidate('review', parseAdviceTable(table([
+    expect(selectOfficeQuotaCandidate('migration', parseAdviceTable(table([
+      ['火山', '0%', '10%', '1 点'],
+      ['Kimi Coding', '0%', '10%', '1 点'],
       ['Codex', '10%', '10%', '1 点'],
       ['Grok', '20%', '5%', '1 点'],
     ])))).toMatchObject({ id: 'grok', provider: 'xai', model: 'grok-4.3' })
-    expect(selectOfficeQuotaCandidate('placement', [])).toMatchObject({ id: 'flash' })
-    expect(selectOfficeQuotaCandidate('migration', parseAdviceTable(table([
+    expect(selectOfficeQuotaCandidate('compaction', parseAdviceTable(table([
+      ['火山', '0%', '10%', '1 点'],
+      ['Kimi Coding', '0%', '10%', '1 点'],
       ['Codex', '0%', '10%', '1 点'],
       ['Grok', '0%', '10%', '1 点'],
     ])))).toMatchObject({ id: 'flash', provider: 'deepseek-official', model: 'deepseek-v4-flash' })
   })
 
-  it('keeps a missing Spark row eligible, skips missing Cursor/Codex/Grok rows, and always finishes on DeepSeek', () => {
+  it('keeps a missing Spark row eligible, skips other missing rows, and always finishes on DeepSeek', () => {
     expect(selectOfficeQuotaCandidate('answer', parseAdviceTable(table([
+      ['Kimi Coding', '10%', '10%', '到线'],
       ['Cursor', '4%', '6%', '已过软线'],
       ['Codex', '0%', '10%', '1 点'],
       ['Grok', '0%', '10%', '1 点'],
@@ -144,6 +168,7 @@ describe('office quota candidate selection', () => {
   it('reads DSH_MNEMON_ADVICE_PATH when advicePath is omitted', () => {
     process.env.DSH_MNEMON_ADVICE_PATH = adviceFile(table([
       ['Spark', '1%', '10%', '到线'],
+      ['Kimi Coding', '10%', '10%', '到线'],
       ['Cursor', '80%', '10%', '1 点'],
     ]))
     expect(selectOfficeQuotaRoute('answer')).toMatchObject({ id: 'composer' })
@@ -166,6 +191,7 @@ describe('configured task Agent resolver', () => {
   it('selects office-quota once per operation even when a fixed model is also configured', () => {
     const markdown = table([
       ['Spark', '1%', '10%', '到线'],
+      ['火山', '21%', '14%', '7 点'],
       ['Cursor', '80%', '10%', '1 点'],
       ['Codex', '90%', '10%', '1 点'],
     ])
@@ -181,8 +207,8 @@ describe('configured task Agent resolver', () => {
       source: 'office-quota',
     })
     expect(resolveConfiguredTaskAgentModel(config, 'write')).toEqual({
-      provider: 'openai-codex',
-      model: 'gpt-5.6-luna',
+      provider: 'volcengine-agent-plan',
+      model: 'ark-code-latest',
       source: 'office-quota',
     })
   })
